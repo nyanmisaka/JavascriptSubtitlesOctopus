@@ -270,6 +270,7 @@ self.oneshotRender = function (lastRenderedTime, renderNow, iteration) {
         target: 'canvas',
         op: 'oneshot-result',
         iteration: iteration,
+        lastRenderedTime: lastRenderedTime,
         eventStart: eventStart,
         eventFinish: eventFinish,
         emptyFinish: emptyFinish,
