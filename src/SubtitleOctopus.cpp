@@ -115,20 +115,96 @@ double libassjs_find_next_event_start(double tm) {
     return closest / 1000.0;
 }
 
-int _is_event_complex(ASS_Event *event) {
+static int _is_move_tag_animated(char *begin, char *end) {
+    int params[6];
+    int count = 0, value = 0, num_digits = 0;
+    for (; begin < end; begin++) {
+        switch (*begin) {
+            case ' ': // fallthrough
+            case '\t':
+                break;
+            case ',':
+                params[count] = value;
+                count++;
+                value = 0;
+                num_digits = 0;
+                break;
+            default: {
+                    int digit = *begin - '0';
+                    if (digit < 0 || digit > 9) return 0; // invalid move
+                    value = value * 10 + digit;
+                    num_digits++;
+                    break;
+                }
+        }
+    }
+    if (num_digits > 0) {
+        params[count] = value;
+        count++;
+    }
+    if (count < 4) return 0; // invalid move
+
+    // move is animated if (x1,y1) != (x2,y2)
+    return params[0] != params[2] || params[1] != params[3];
+}
+
+static int _is_animated_tag(char *begin, char *end) {
+    // strip whitespaces around the tag
+    while (begin < end && (*begin == ' ' || *begin == '\t')) begin++;
+    while (end > begin && (end[-1] == ' ' || end[-1] == '\t')) end--;
+
+    int length = end - begin;
+    if (length < 3 || *begin != '\\') return 0; // too short to be animated or not a command
+
+    switch (begin[1]) {
+        case 'k': // fallthrough
+        case 'K':
+            // \kXX is karaoke
+            return 1;
+        case 't':
+            // \t(...) is transition
+            return length >= 4 && begin[2] == '(' && end[-1] == ')';
+        case 'm':
+            if (length >=7 && end[-1] == ')' && strcmp(begin, "\\move(") == 0) {
+                return _is_move_tag_animated(begin + 6, end - 1);
+            }
+            break;
+        case 'f':
+            // \fad() or \fade() are fades
+            return (length >= 7 && end[-1] == ')' &&
+                (strcmp(begin, "\\fad(") == 0 || strcmp(begin, "\\fade(") == 0));
+    }
+
+    return 0;
+}
+
+static int _is_event_animated(ASS_Event *event) {
     // event is complex if it's animated in any way,
     // either by having non-empty Effect or
     // by having tags (enclosed in '{}' in Text)
     if (event->Effect && event->Effect[0] != '\0') return 1;
 
     int escaped = 0;
+    char *tagStart = NULL;
     for (char *p = event->Text; *p != '\0'; p++) {
         switch (*p) {
             case '\\':
                 escaped = !escaped;
                 break;
             case '{':
-                if (escaped) return 1;
+                if (!escaped && tagStart == NULL) tagStart = p + 1;
+                break;
+            case '}':
+                if (!escaped && tagStart != NULL) {
+                    if (_is_animated_tag(tagStart, p)) return 1;
+                    tagStart = NULL;
+                }
+                break;
+            case ';':
+                if (tagStart != NULL) {
+                    if (_is_animated_tag(tagStart, p)) return 1;
+                }
+                tagStart = p + 1;
                 break;
         }
     }
@@ -136,10 +212,18 @@ int _is_event_complex(ASS_Event *event) {
     return 0;
 }
 
-int libassjs_find_event_stop_times(double tm, double *eventFinish, double *emptyFinish) {
+static void detect_animated_events() {
+    ASS_Event *cur = track->events;
+    int *animated = is_animated_events;
+    for (int i = 0; i < track->n_events; i++, cur++, animated++) {
+        *animated = _is_event_animated(cur);
+    }
+}
+
+void libassjs_find_event_stop_times(double tm, double *eventFinish, double *emptyFinish, int *is_animated) {
     if (!track || track->n_events == 0) {
         *eventFinish = *emptyFinish = -1;
-        return 0;
+        return;
     }
 
     ASS_Event *cur = track->events;
@@ -159,12 +243,13 @@ int libassjs_find_event_stop_times(double tm, double *eventFinish, double *empty
                 if (finish > maxFinish) {
                     maxFinish = finish;
                 }
-                if (!current_animated && _is_event_complex(cur)) current_animated = 1;
+                if (!current_animated) current_animated = m_is_event_animated[i];
             }
         } else if (start < minStart || minStart == -1) {
             minStart = start;
         }
     }
+    *is_animated = current_animated;
 
     if (minFinish != -1) {
         // some event is going on, so we need to re-draw either when it stops
@@ -182,8 +267,6 @@ int libassjs_find_event_stop_times(double tm, double *eventFinish, double *empty
         // there's no empty space after eventFinish happens
         *emptyFinish = *eventFinish;
     }
-
-    return current_animated;
 }
 
 class SubtitleOctopus {
@@ -229,6 +312,7 @@ public:
 
         reloadFonts();
         m_blend.clear();
+        m_is_event_animated = NULL;
     }
 
     /* TRACK */
@@ -239,6 +323,14 @@ public:
             fprintf(stderr, "jso: Failed to start a track\n");
             exit(4);
         }
+
+        free(m_is_event_animated);
+        m_is_event_animated = (int*)malloc(sizeof(int) * track->n_events);
+        if (m_is_event_animated == NULL) {
+            printf("cannot parse animated events\n");
+            exit(5);
+        }
+        detect_animated_events();
     }
 
     void createTrackMem(char *buf, unsigned long bufsize) {
@@ -255,6 +347,8 @@ public:
             ass_free_track(track);
             track = NULL;
         }
+        free(m_is_event_animated);
+        m_is_event_animated = NULL;
     }
     /* TRACK */
 
@@ -275,6 +369,8 @@ public:
         ass_renderer_done(ass_renderer);
         ass_library_done(ass_library);
         m_blend.clear();
+        free(m_is_event_animated);
+        m_is_event_animated = NULL;
     }
     void reloadLibrary() {
         quitLibrary();
@@ -447,6 +543,7 @@ public:
 private:
     ReusableBuffer m_blend;
     RenderBlendResult m_blendResult;
+    int *m_is_event_animated;
 };
 
 int main(int argc, char *argv[]) { return 0; }
