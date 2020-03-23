@@ -570,11 +570,9 @@ var SubtitlesOctopus = function (options) {
                             size += item.buffer.byteLength;
                         }
                         if ((data.emptyFinish > 0 && data.emptyFinish - data.eventStart < 1.0 / self.targetFps) || data.animated) {
-                            newFinish = data.eventStart + 1.0 / self.targetFps;
-                            if (newFinish < data.emptyFinish) {
-                                data.emptyFinish = newFinish;
-                                data.eventFinish = (data.eventFinish > newFinish) ? newFinish : data.eventFinish;
-                            }
+                            var newFinish = data.eventStart + 1.0 / self.targetFps;
+                            data.emptyFinish = newFinish;
+                            data.eventFinish = (data.eventFinish > newFinish) ? newFinish : data.eventFinish;
                         }
                         self.renderedItems.push({
                             eventStart: data.eventStart,
