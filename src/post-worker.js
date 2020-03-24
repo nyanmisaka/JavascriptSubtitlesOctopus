@@ -216,12 +216,11 @@ self.blendRenderTiming = function (timing, force) {
     var canvases = [];
     var buffers = [];
 
-    if (renderResult.image) {
-        // make a copy, as we should free the memory so subsequent calls can utilize it
-        var result = new Uint8Array(HEAPU8.subarray(renderResult.image, renderResult.image + renderResult.dest_width * renderResult.dest_height * 4));
-
-        canvases = [{w: renderResult.dest_width, h: renderResult.dest_height, x: renderResult.dest_x, y: renderResult.dest_y, buffer: result.buffer}];
-        buffers = [result.buffer];
+    // make a copy, as we should free the memory so subsequent calls can utilize it
+    for (var part = renderResult.part; part.ptr != 0; part = part.next) {
+        var result = new Uint8Array(HEAPU8.subarray(part.image, part.image + part.dest_width * part.dest_height * 4));
+        canvases.push({w: part.dest_width, h: part.dest_height, x: part.dest_x, y: part.dest_y, buffer: result.buffer});
+        buffers.push(result.buffer);
     }
 
     return {
