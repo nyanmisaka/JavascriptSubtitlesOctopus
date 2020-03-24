@@ -14,6 +14,7 @@ var SubtitlesOctopus = function (options) {
     var self = this;
     self.canvas = options.canvas; // HTML canvas element (optional if video specified)
     self.renderMode = options.renderMode || (options.lossyRender ? 'lossy' : 'wasm-blend');
+    self.dropAllAnimations = options.dropAllAnimations || false;
     self.libassMemoryLimit = options.libassMemoryLimit || 0;
     self.libassGlyphLimit = options.libassGlyphLimit || 0;
     self.targetFps = options.targetFps || 24;
@@ -125,7 +126,8 @@ var SubtitlesOctopus = function (options) {
             targetFps: self.targetFps,
             libassMemoryLimit: self.libassMemoryLimit,
             libassGlyphLimit: self.libassGlyphLimit,
-            renderOnDemand: self.renderAhead > 0
+            renderOnDemand: self.renderAhead > 0,
+            dropAllAnimations: self.dropAllAnimations
         });
     };
 

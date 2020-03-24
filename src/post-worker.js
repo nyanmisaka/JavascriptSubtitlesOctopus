@@ -9,6 +9,7 @@ self.lastCurrentTimeReceivedAt = Date.now();
 self.targetFps = 24;
 self.libassMemoryLimit = 0; // in MiB
 self.renderOnDemand = false; // determines if only rendering on demand
+self.dropAllAnimations = false; // set to true to enable "lite mode" with all animations disabled for speed
 
 self.width = 0;
 self.height = 0;
@@ -621,6 +622,7 @@ function onMessageFromMainEmscriptenThread(message) {
             self.libassMemoryLimit = message.data.libassMemoryLimit || self.libassMemoryLimit;
             self.libassGlyphLimit = message.data.libassGlyphLimit || 0;
             self.renderOnDemand = message.data.renderOnDemand || false;
+            self.dropAllAnimations = message.data.dropAllAnimations || false;
             removeRunDependency('worker-init');
             postMessage({
                 target: "ready",
