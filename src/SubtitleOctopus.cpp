@@ -210,17 +210,21 @@ public:
 
     int status;
 
-    SubtitleOctopus() {
-        status = 0;
-        ass_library = NULL;
-        ass_renderer = NULL;
-        track = NULL;
-        canvas_w = 0;
-        canvas_h = 0;
+    SubtitleOctopus(): ass_library(NULL), ass_renderer(NULL), track(NULL), canvas_w(0), canvas_h(0), status(0), m_is_event_animated(NULL), m_drop_animations(false) {
     }
 
     void setLogLevel(int level) {
         log_level = level;
+    }
+
+    void setDropAnimations(int value) {
+        bool rescan = m_drop_animations != bool(value) && track != NULL;
+        m_drop_animations = bool(value);
+        if (rescan) rescanAllAnimations();
+    }
+
+    int getDropAnimations() const {
+        return m_drop_animations;
     }
 
     void initLibrary(int frame_w, int frame_h) {
@@ -253,14 +257,7 @@ public:
             fprintf(stderr, "jso: Failed to start a track\n");
             exit(4);
         }
-
-        free(m_is_event_animated);
-        m_is_event_animated = (int*)malloc(sizeof(int) * track->n_events);
-        if (m_is_event_animated == NULL) {
-            printf("cannot parse animated events\n");
-            exit(5);
-        }
-        detectAnimatedEvents();
+        rescanAllAnimations();
     }
 
     void createTrackMem(char *buf, unsigned long bufsize) {
@@ -270,6 +267,7 @@ public:
             fprintf(stderr, "jso: Failed to start a track\n");
             exit(4);
         }
+        rescanAllAnimations();
     }
 
     void removeTrack() {
@@ -288,6 +286,7 @@ public:
         canvas_h = frame_h;
         canvas_w = frame_w;
     }
+
     ASS_Image* renderImage(double time, int* changed) {
         ASS_Image *img = ass_render_frame(ass_renderer, track, (int) (time * 1000), changed);
         return img;
@@ -302,6 +301,7 @@ public:
         free(m_is_event_animated);
         m_is_event_animated = NULL;
     }
+
     void reloadLibrary() {
         quitLibrary();
 
@@ -321,10 +321,14 @@ public:
     }
 
     int allocEvent() {
+        free(m_is_event_animated);
+        m_is_event_animated = NULL;
         return ass_alloc_event(track);
     }
 
     void removeEvent(int eid) {
+        free(m_is_event_animated);
+        m_is_event_animated = NULL;
         ass_free_event(track, eid);
     }
 
@@ -349,6 +353,8 @@ public:
     }
 
     void removeAllEvents() {
+        free(m_is_event_animated);
+        m_is_event_animated = NULL;
         ass_flush_events(track);
     }
 
@@ -470,7 +476,7 @@ public:
         return &m_blendResult;
     }
 
-    double findNextEventStart(double tm) {
+    double findNextEventStart(double tm) const {
         if (!track || track->n_events == 0) return -1;
 
         ASS_Event *cur = track->events;
@@ -487,7 +493,7 @@ public:
         return closest / 1000.0;
     }
 
-    EventStopTimesResult* findEventStopTimes(double tm) {
+    EventStopTimesResult* findEventStopTimes(double tm) const {
         static EventStopTimesResult result;
         if (!track || track->n_events == 0) {
             result.eventFinish = result.emptyFinish = -1;
@@ -511,7 +517,7 @@ public:
                     if (finish > maxFinish) {
                         maxFinish = finish;
                     }
-                    if (!current_animated) current_animated = m_is_event_animated[i];
+                    if (!current_animated && m_is_event_animated) current_animated = m_is_event_animated[i];
                 }
             } else if (start < minStart || minStart == -1) {
                 minStart = start;
@@ -539,8 +545,14 @@ public:
         return &result;
     }
 
-private:
-    void detectAnimatedEvents() {
+    void rescanAllAnimations() {
+        free(m_is_event_animated);
+        m_is_event_animated = (int*)malloc(sizeof(int) * track->n_events);
+        if (m_is_event_animated == NULL) {
+            printf("cannot parse animated events\n");
+            exit(5);
+        }
+
         ASS_Event *cur = track->events;
         int *animated = m_is_event_animated;
         for (int i = 0; i < track->n_events; i++, cur++, animated++) {
@@ -548,9 +560,11 @@ private:
         }
     }
 
+private:
     ReusableBuffer m_blend;
     RenderBlendResult m_blendResult;
     int *m_is_event_animated;
+    bool m_drop_animations;
 };
 
 int main(int argc, char *argv[]) { return 0; }
