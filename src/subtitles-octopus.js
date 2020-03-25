@@ -21,6 +21,7 @@ var SubtitlesOctopus = function (options) {
     self.prescaleFactor = options.prescaleFactor || 1.0;
     self.prescaleHeightLimit = options.prescaleHeightLimit || 1080;
     self.maxRenderHeight = options.maxRenderHeight || 0; // 0 - no limit
+    self.resizeVariation = options.resizeVariation || 0.2; // by how many a size can vary before it would cause clearance of prerendered buffer
     self.renderAhead = options.renderAhead || 0; // how many MiB to render ahead and store; 0 to disable (approximate)
     self.isOurCanvas = false; // (internal) we created canvas and manage it
     self.video = options.video; // HTML video element (optional if canvas specified)
@@ -49,7 +50,9 @@ var SubtitlesOctopus = function (options) {
         eventOver: false,
         iteration: 0,
         renderRequested: false,
-        requestNextTimestamp: -1
+        requestNextTimestamp: -1,
+        prevWidth: null,
+        prevHeight: null
     }
 
     self.hasAlphaBug = false;
@@ -394,11 +397,27 @@ var SubtitlesOctopus = function (options) {
 
     function resetRenderAheadCache() {
         if (self.renderAhead > 0) {
+            if (self.oneshotState.prevHeight && self.oneshotState.prevWidth) {
+                if (self.canvas.height >= self.oneshotState.prevHeight * (1.0 - self.resizeVariation) &&
+                    self.canvas.height <= self.oneshotState.prevHeight * (1.0 + self.resizeVariation) &&
+                    self.canvas.width >= self.oneshotState.prevWidth * (1.0 - self.resizeVariation) &&
+                    self.canvas.width <= self.oneshotState.prevWidth * (1.0 + self.resizeVariation)) {
+                    console.debug('not resetting prerender cache - keep using current');
+                    // keep rendering canvas size the same,
+                    // otherwise subtitles got placed incorrectly
+                    self.canvas.width = self.oneshotState.prevWidth;
+                    self.canvas.height = self.oneshotState.prevHeight;
+                    return;
+                }
+            }
+
             console.info('resetting prerender cache');
             self.renderedItems = [];
             self.oneshotState.eventStart = null;
             self.oneshotState.iteration++;
             self.oneshotState.renderRequested = false;
+            self.oneshotState.prevHeight = self.canvas.height;
+            self.oneshotState.prevWidth = self.canvas.width;
 
             window.requestAnimationFrame(oneshotRender);
             tryRequestOneshot(undefined, true);
