@@ -54,6 +54,7 @@ var SubtitlesOctopus = function (options) {
         prevWidth: null,
         prevHeight: null
     }
+    self.rafId = 0;
 
     self.hasAlphaBug = false;
 
@@ -369,7 +370,7 @@ var SubtitlesOctopus = function (options) {
     }
 
     function oneshotRender() {
-        window.requestAnimationFrame(oneshotRender);
+        self.rafId = window.requestAnimationFrame(oneshotRender);
         if (!self.video) return;
 
         var currentTime = self.video.currentTime + self.timeOffset;
@@ -401,6 +402,11 @@ var SubtitlesOctopus = function (options) {
         } else if (_cleanPastRendered(currentTime) && finishTime >= 0) {
             tryRequestOneshot(finishTime, animated);
         }
+    }
+
+    function stopOneshotRender() {
+        window.cancelAnimationFrame(self.rafId);
+        self.rafId = 0;
     }
 
     self.resetRenderAheadCache = function (isResizing) {
@@ -437,7 +443,7 @@ var SubtitlesOctopus = function (options) {
             self.oneshotState.prevHeight = self.canvas.height;
             self.oneshotState.prevWidth = self.canvas.width;
 
-            window.requestAnimationFrame(oneshotRender);
+            if (!self.rafId) self.rafId = window.requestAnimationFrame(oneshotRender);
             tryRequestOneshot(undefined, true);
         }
     }
@@ -840,6 +846,8 @@ var SubtitlesOctopus = function (options) {
         if (self.video) {
             self.video.parentNode.removeChild(self.canvasParent);
         }
+
+        stopOneshotRender();
     };
 
     self.fetchFromWorker = function (workerOptions, onSuccess, onError) {
