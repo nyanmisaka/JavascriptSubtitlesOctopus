@@ -140,6 +140,12 @@ When creating an instance of SubtitleOctopus, you can set the following options:
 - `maxRenderHeight`: The maximum rendering height of the subtitles canvas.
                      Beyond this subtitles will be upscaled by the browser.
                      (Default: `0` - no limit)
+- `dropAllAnimations`: Remove all animation tags, such as karaoke, move, fade, etc.
+                       (Default: `false`)
+- `renderAhead`: How many MiB (approximate) of subtitles to render ahead and store.
+                 (Default: `0` - don't render ahead)
+- `resizeVariation`: The resize threshold at which the cache of pre-rendered events is cleared.
+                     (Default: `0.2`)
 
 ### Rendering Modes
 #### JS Blending
@@ -167,6 +173,24 @@ will not stop the rendering process at all and may cause some bitmap loss or
 simply will not draw anything in canvas, mostly on low end devices.
 
 **WARNING: Experimental, not stable and not working in some browsers**
+
+#### Render Ahead (WASM Blending with pre-rendering) (EXPERIMENTAL)
+Upon creating the SubtitleOctopus instance, set `renderAhead` in the options to a positive value to use this mode.
+In this mode, SubtitleOctopus renders events in advance (using WASM blending) so that they are ready in time.
+The amount of pre-rendered events is controlled by the `renderAhead` option.
+Each pre-rendered event is provided with information about its start time, end time, and end time of the gap after (if any).
+This mode will analyse the events to avoid rendering empty sections or rerendering non-animated events.
+Resizing the video player clears the cache of pre-rendered events (the threshold is set by `resizeVariation`).
+
+> The `renderMode` and `lossyRender` options are ignored.
+
+> **WARNING: Experimental, may stall on heavily animated subtitles**
+This mode tries to render every transition - at worst, every frame - in advance.
+If the rendering of many frames takes too long and the cache of prepared frames gets depleted
+(e.g. during a long section with heavy animations), the current subtitle-frame will continue to
+be displayed until the prerendering can catch up again.
+Adjusting `prescaleFactor`, `prescaleHeightLimit` and `maxRenderHeight` to lower the resolution of
+the rendering canvas can work around this at the expense of visual quality.
 
 
 ### Brotli Compressed Subtitles
