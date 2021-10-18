@@ -356,7 +356,8 @@ var SubtitlesOctopus = function (options) {
     }
 
     function _renderSubtitleEvent(event, currentTime) {
-        var eventOver = event.eventFinish <= currentTime;
+        // keep event displayed, if there is no gap after it, until it is replaced by a new one
+        var eventOver = event.eventFinish !== event.emptyFinish && event.eventFinish <= currentTime;
         if (self.oneshotState.eventStart == event.eventStart && self.oneshotState.eventOver == eventOver) return;
         self.oneshotState.eventStart = event.eventStart;
         self.oneshotState.eventOver = eventOver;
@@ -387,12 +388,17 @@ var SubtitlesOctopus = function (options) {
         if (!self.video) return;
 
         var currentTime = self.video.currentTime + self.timeOffset;
-        var finishTime = -1, eventShown = false, animated = false;
+
+        var eventToShow = null;
+        var finishTime = -1;
+        var animated = false;
+
         for (var i = 0, len = self.renderedItems.length; i < len; i++) {
             var item = self.renderedItems[i];
-            if (!eventShown && item.eventStart <= currentTime && (item.emptyFinish < 0 || item.emptyFinish > currentTime)) {
-                _renderSubtitleEvent(item, currentTime);
-                eventShown = true;
+
+            // we need the last started event
+            if (item.eventStart <= currentTime) {
+                eventToShow = item;
                 finishTime = item.emptyFinish;
             } else if (finishTime >= 0) {
                 // we've already found a known event, now find
@@ -404,16 +410,29 @@ var SubtitlesOctopus = function (options) {
                 } else {
                     break;
                 }
+            } else {
+                break;
             }
         }
 
-        if (!eventShown) {
-            if (Math.abs(self.oneshotState.requestNextTimestamp - currentTime) > EVENTTIME_ULP) {
-                _cleanPastRendered(currentTime);
-                tryRequestOneshot(currentTime, true);
+        var nextTime = currentTime;
+
+        if (eventToShow) {
+            _renderSubtitleEvent(eventToShow, currentTime);
+
+            if (finishTime >= 0) {
+                // request the next event from the most distant time
+                nextTime = Math.max(finishTime, nextTime);
+            } else {
+                // reached end-of-events
+                nextTime = -1;
             }
-        } else if (_cleanPastRendered(currentTime) && finishTime >= 0) {
-            tryRequestOneshot(finishTime, animated);
+        }
+
+        var freed = !self.video.paused && _cleanPastRendered(currentTime);
+
+        if ((freed || !eventToShow) && nextTime >= 0 && Math.abs(self.oneshotState.requestNextTimestamp - nextTime) > EVENTTIME_ULP) {
+            tryRequestOneshot(nextTime, nextTime === finishTime ? animated : true);
         }
     }
 
