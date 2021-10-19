@@ -2,6 +2,8 @@
 var FRAMETIME_ULP = 0.001;
 // minimum time difference between subtitle events
 var EVENTTIME_ULP = 0.01;
+// maximum time offset for the next request in seconds
+var MAX_REQUEST_OFFSET = 1;
 
 var SubtitlesOctopus = function (options) {
     var supportsWebAssembly = false;
@@ -57,6 +59,7 @@ var SubtitlesOctopus = function (options) {
         iteration: 0,
         renderRequested: false,
         requestNextTimestamp: -1,
+        nextRequestOffset: 0, // Next request offset, s
         prevWidth: null,
         prevHeight: null
     }
@@ -308,6 +311,7 @@ var SubtitlesOctopus = function (options) {
 
         if (seekClean) {
             self.oneshotState.displayedEvent = null;
+            self.oneshotState.nextRequestOffset = 0;
         }
 
         var removed = retainedItems.length < self.renderedItems.length;
@@ -369,6 +373,9 @@ var SubtitlesOctopus = function (options) {
         self.oneshotState.eventStart = event.eventStart;
         self.oneshotState.eventOver = eventOver;
 
+        self.oneshotState.nextRequestOffset = (self.oneshotState.nextRequestOffset + event.spentTime * 1e-3) * 0.5;
+        self.oneshotState.nextRequestOffset = Math.min(self.oneshotState.nextRequestOffset, MAX_REQUEST_OFFSET);
+
         var beforeDrawTime = performance.now();
         if (event.viewport.width != self.canvas.width || event.viewport.height != self.canvas.height) {
             self.canvas.width = event.viewport.width;
@@ -397,8 +404,6 @@ var SubtitlesOctopus = function (options) {
         var currentTime = self.video.currentTime + self.timeOffset;
 
         var eventToShow = null;
-        var finishTime = -1;
-        var animated = false;
 
         for (var i = 0, len = self.renderedItems.length; i < len; i++) {
             var item = self.renderedItems[i];
@@ -406,6 +411,34 @@ var SubtitlesOctopus = function (options) {
             // we need the last started event
             if (item.eventStart <= currentTime) {
                 eventToShow = item;
+            } else {
+                break;
+            }
+        }
+
+        if (eventToShow) {
+            _renderSubtitleEvent(eventToShow, currentTime);
+        } else if (self.oneshotState.displayedEvent) {
+            _renderSubtitleEvent(self.oneshotState.displayedEvent, currentTime);
+        }
+
+        var nextTime = currentTime;
+
+        if (!self.video.paused) {
+            // request the next event with some extra time, because we won't get it instantly
+            nextTime += Math.max(self.oneshotState.nextRequestOffset, 1.0 / self.targetFps) * self.video.playbackRate;
+        }
+
+        var nextEvent = null;
+        var finishTime = -1;
+        var animated = false;
+
+        for (var i = 0, len = self.renderedItems.length; i < len; i++) {
+            var item = self.renderedItems[i];
+
+            // we need to find a series of events from the request time
+            if (item.eventStart <= nextTime) {
+                nextEvent = item;
                 finishTime = item.emptyFinish;
             } else if (finishTime >= 0) {
                 // we've already found a known event, now find
@@ -422,11 +455,7 @@ var SubtitlesOctopus = function (options) {
             }
         }
 
-        var nextTime = currentTime;
-
-        if (eventToShow) {
-            _renderSubtitleEvent(eventToShow, currentTime);
-
+        if (nextEvent) {
             if (finishTime >= 0) {
                 // request the next event from the most distant time
                 nextTime = Math.max(finishTime, nextTime);
@@ -434,8 +463,6 @@ var SubtitlesOctopus = function (options) {
                 // reached end-of-events
                 nextTime = -1;
             }
-        } else if (self.oneshotState.displayedEvent) {
-            _renderSubtitleEvent(self.oneshotState.displayedEvent, currentTime);
         }
 
         var freed = !self.video.paused && _cleanPastRendered(currentTime);
@@ -483,6 +510,7 @@ var SubtitlesOctopus = function (options) {
             self.oneshotState.renderRequested = false;
             self.oneshotState.prevHeight = targetHeight;
             self.oneshotState.prevWidth = targetWidth;
+            self.oneshotState.nextRequestOffset = 0;
 
             if (!isResizing) {
                 self.oneshotState.displayedEvent = null;
