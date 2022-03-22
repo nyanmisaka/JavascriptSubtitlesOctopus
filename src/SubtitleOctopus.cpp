@@ -90,30 +90,30 @@ const float MAX_UINT8_CAST = 255.9 / 255;
 
 #define CLAMP_UINT8(value) ((value > MIN_UINT8_CAST) ? ((value < MAX_UINT8_CAST) ? (int)(value * 255) : 255) : 0)
 
-typedef struct RenderBlendPart {
+struct RenderBlendPart {
     int dest_x, dest_y, dest_width, dest_height;
     unsigned char *image;
     RenderBlendPart *next;
-} RenderBlendPart;
+};
 
-typedef struct RenderBlendResult {
+struct RenderBlendResult {
     int changed;
     double blend_time;
     RenderBlendPart *part;
-} RenderBlendResult;
+};
 
 // maximum regions - a grid of 3x3
 #define MAX_BLEND_STORAGES (3 * 3)
-typedef struct {
+struct RenderBlendStorage {
     RenderBlendPart part;
     ReusableBuffer buf;
     bool taken;
-} RenderBlendStorage;
+};
 
-typedef struct {
+struct EventStopTimesResult {
     double eventFinish, emptyFinish;
     int is_animated;
-} EventStopTimesResult;
+};
 
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
