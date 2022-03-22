@@ -14,12 +14,15 @@ var SubtitlesOctopus = function (options) {
     var self = this;
     self.canvas = options.canvas; // HTML canvas element (optional if video specified)
     self.renderMode = options.renderMode || (options.lossyRender ? 'lossy' : 'wasm-blend');
+    self.dropAllAnimations = options.dropAllAnimations || false;
     self.libassMemoryLimit = options.libassMemoryLimit || 0;
     self.libassGlyphLimit = options.libassGlyphLimit || 0;
     self.targetFps = options.targetFps || 24;
     self.prescaleFactor = options.prescaleFactor || 1.0;
     self.prescaleHeightLimit = options.prescaleHeightLimit || 1080;
     self.maxRenderHeight = options.maxRenderHeight || 0; // 0 - no limit
+    self.resizeVariation = options.resizeVariation || 0.2; // by how many a size can vary before it would cause clearance of prerendered buffer
+    self.renderAhead = options.renderAhead || 0; // how many MiB to render ahead and store; 0 to disable (approximate)
     self.isOurCanvas = false; // (internal) we created canvas and manage it
     self.video = options.video; // HTML video element (optional if canvas specified)
     self.canvasParent = null; // (internal) HTML canvas parent element
@@ -39,6 +42,19 @@ var SubtitlesOctopus = function (options) {
     self.pixelRatio = window.devicePixelRatio || 1; // (internal) Device pixel ratio (for high dpi devices)
 
     self.timeOffset = options.timeOffset || 0; // Time offset would be applied to currentTime from video (option)
+
+    self.renderedItems = []; // used to store items rendered ahead when renderAhead > 0
+    self.renderAhead = self.renderAhead * 1024 * 1024 * 0.9 /* try to eat less than requested */;
+    self.oneshotState = {
+        eventStart: null,
+        eventOver: false,
+        iteration: 0,
+        renderRequested: false,
+        requestNextTimestamp: -1,
+        prevWidth: null,
+        prevHeight: null
+    }
+    self.rafId = 0;
 
     self.hasAlphaBug = false;
 
@@ -113,7 +129,9 @@ var SubtitlesOctopus = function (options) {
             debug: self.debug,
             targetFps: self.targetFps,
             libassMemoryLimit: self.libassMemoryLimit,
-            libassGlyphLimit: self.libassGlyphLimit
+            libassGlyphLimit: self.libassGlyphLimit,
+            renderOnDemand: self.renderAhead > 0,
+            dropAllAnimations: self.dropAllAnimations
         });
     };
 
@@ -183,6 +201,9 @@ var SubtitlesOctopus = function (options) {
             self.video.addEventListener("seeked", function () {
                 self.video.addEventListener("timeupdate", timeupdate, false);
                 self.setCurrentTime(video.currentTime + self.timeOffset);
+                if (self.renderAhead > 0) {
+                    _cleanPastRendered(video.currentTime + self.timeOffset, true);
+                }
             }, false);
             self.video.addEventListener("ratechange", function () {
                 self.setRate(video.playbackRate);
@@ -237,6 +258,195 @@ var SubtitlesOctopus = function (options) {
     self.setSubUrl = function (subUrl) {
         self.subUrl = subUrl;
     };
+
+    function _cleanPastRendered(currentTime, seekClean) {
+        var retainedItems = [];
+        for (var i = 0, len = self.renderedItems.length; i < len; i++) {
+            var item = self.renderedItems[i];
+            if (item.emptyFinish < 0 || item.emptyFinish >= currentTime) {
+                // item is not yet finished, retain it
+                retainedItems.push(item);
+            }
+        }
+
+        if (seekClean && retainedItems.length > 0) {
+            // items are ordered by event start time when we push to self.renderedItems,
+            // so first item is the earliest
+            if (currentTime < retainedItems[0].eventStart) {
+                if (retainedItems[0].eventStart - currentTime > 60) {
+                    console.info("seeked back too far, cleaning prerender buffer");
+                    retainedItems = [];
+                } else {
+                    console.info("seeked backwards, need to free up some buffer");
+                    var size = 0, limit = self.renderAhead * 0.3 /* try to take no more than 1/3 of buffer */;
+                    var retain = [];
+                    for (var i = 0, len = retainedItems.length; i < len; i++) {
+                        var item = retainedItems[i];
+                        size += item.size;
+                        // Remove the end marker (emptyFinish < 0) to allow re-rendering in case we already reached end-of-events
+                        if (size >= limit || item.emptyFinish < 0) break;
+                        retain.push(item);
+                    }
+                    retainedItems = retain;
+                }
+            }
+        }
+
+        var removed = retainedItems.length < self.renderedItems;
+        self.renderedItems = retainedItems;
+        return removed;
+    }
+
+    function tryRequestOneshot(currentTime, renderNow) {
+        if (!self.renderAhead || self.renderAhead <= 0) return;
+        if (self.oneshotState.renderRequested && !renderNow) return;
+
+        if (typeof currentTime === 'undefined') {
+            if (!self.video) return;
+            currentTime = self.video.currentTime + self.timeOffset;
+        }
+
+        var size = 0;
+        for (var i = 0, len = self.renderedItems.length; i < len; i++) {
+            var item = self.renderedItems[i];
+            if (item.emptyFinish < 0) {
+                console.info('oneshot already reached end-of-events');
+                return;
+            }
+            if (currentTime >= item.eventStart && currentTime < item.emptyFinish) {
+                // an event for requested time already exists
+                console.debug('not requesting a render for ' + currentTime +
+                    ' as event already covering it exists (start=' +
+                    item.eventStart + ', empty=' + item.emptyFinish + ')');
+                return;
+            }
+            size += item.size;
+        }
+
+        if (size <= self.renderAhead) {
+            var lastRendered = currentTime - (renderNow ? 0 : 0.001);
+            if (!self.oneshotState.renderRequested) {
+                self.oneshotState.renderRequested = true;
+                self.worker.postMessage({
+                    target: 'oneshot-render',
+                    lastRendered: lastRendered,
+                    renderNow: renderNow,
+                    iteration: self.oneshotState.iteration
+                });
+            } else {
+                if (self.workerActive) {
+                    console.info('worker busy, requesting to seek');
+                }
+                self.oneshotState.requestNextTimestamp = lastRendered;
+            }
+        }
+    }
+
+    function _renderSubtitleEvent(event, currentTime) {
+        var eventOver = event.eventFinish < currentTime;
+        if (self.oneshotState.eventStart == event.eventStart && self.oneshotState.eventOver == eventOver) return;
+        self.oneshotState.eventStart = event.eventStart;
+        self.oneshotState.eventOver = eventOver;
+
+        var beforeDrawTime = performance.now();
+        if (event.viewport.width != self.canvas.width || event.viewport.height != self.canvas.height) {
+            self.canvas.width = event.viewport.width;
+            self.canvas.height = event.viewport.height;
+        }
+        self.ctx.clearRect(0, 0, self.canvas.width, self.canvas.height);
+        if (!eventOver) {
+            for (var i = 0; i < event.items.length; i++) {
+                var image = event.items[i];
+                self.bufferCanvas.width = image.w;
+                self.bufferCanvas.height = image.h;
+                self.bufferCanvasCtx.putImageData(image.image, 0, 0);
+                self.ctx.drawImage(self.bufferCanvas, image.x, image.y);
+            }
+        }
+        if (self.debug) {
+            var drawTime = Math.round(performance.now() - beforeDrawTime);
+            console.log('render: ' + Math.round(event.spentTime - event.blendTime) + ' ms, blend: ' + Math.round(event.blendTime) + ' ms, draw: ' + drawTime + ' ms');
+        }
+    }
+
+    function oneshotRender() {
+        self.rafId = window.requestAnimationFrame(oneshotRender);
+        if (!self.video) return;
+
+        var currentTime = self.video.currentTime + self.timeOffset;
+        var finishTime = -1, eventShown = false, animated = false;
+        for (var i = 0, len = self.renderedItems.length; i < len; i++) {
+            var item = self.renderedItems[i];
+            if (!eventShown && item.eventStart <= currentTime && (item.emptyFinish < 0 || item.emptyFinish > currentTime)) {
+                _renderSubtitleEvent(item, currentTime);
+                eventShown = true;
+                finishTime = item.emptyFinish;
+            } else if (finishTime >= 0) {
+                // we've already found a known event, now find
+                // the farthest point of consequent events
+                // NOTE: self.renderedItems may have gaps due to seeking
+                if (item.eventStart - finishTime < 0.01) {
+                    finishTime = item.emptyFinish;
+                    animated = item.animated;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if (!eventShown) {
+            if (Math.abs(self.oneshotState.requestNextTimestamp - currentTime) > 0.01) {
+                _cleanPastRendered(currentTime);
+                tryRequestOneshot(currentTime, true);
+            }
+        } else if (_cleanPastRendered(currentTime) && finishTime >= 0) {
+            tryRequestOneshot(finishTime, animated);
+        }
+    }
+
+    function stopOneshotRender() {
+        window.cancelAnimationFrame(self.rafId);
+        self.rafId = 0;
+    }
+
+    self.resetRenderAheadCache = function (isResizing) {
+        if (self.renderAhead > 0) {
+            var newCache = [];
+            if (isResizing && self.oneshotState.prevHeight && self.oneshotState.prevWidth) {
+                if (self.oneshotState.prevHeight == self.canvas.height &&
+                    self.oneshotState.prevWidth == self.canvas.width) return;
+                var timeLimit = 10, sizeLimit = self.renderAhead * 0.3;
+                if (self.canvas.height >= self.oneshotState.prevHeight * (1.0 - self.resizeVariation) &&
+                    self.canvas.height <= self.oneshotState.prevHeight * (1.0 + self.resizeVariation) &&
+                    self.canvas.width >= self.oneshotState.prevWidth * (1.0 - self.resizeVariation) &&
+                    self.canvas.width <= self.oneshotState.prevWidth * (1.0 + self.resizeVariation)) {
+                    console.debug('viewport changes are small, leaving more of prerendered buffer');
+                    timeLimit = 30;
+                    sizeLimit = self.renderAhead * 0.5;
+                }
+                var stopTime = self.video.currentTime + self.timeOffset + timeLimit;
+                var size = 0;
+                for (var i = 0; i < self.renderedItems.length; i++) {
+                    var item = self.renderedItems[i];
+                    if (item.emptyFinish < 0 || item.emptyFinish >= stopTime) break;
+                    size += item.size;
+                    if (size >= sizeLimit) break;
+                    newCache.push(item);
+                }
+            }
+
+            console.info('resetting prerender cache');
+            self.renderedItems = newCache;
+            self.oneshotState.eventStart = null;
+            self.oneshotState.iteration++;
+            self.oneshotState.renderRequested = false;
+            self.oneshotState.prevHeight = self.canvas.height;
+            self.oneshotState.prevWidth = self.canvas.width;
+
+            if (!self.rafId) self.rafId = window.requestAnimationFrame(oneshotRender);
+            tryRequestOneshot(undefined, true);
+        }
+    }
 
     self.renderFrameData = null;
     function renderFrames() {
@@ -362,6 +572,86 @@ var SubtitlesOctopus = function (options) {
                         self.canvas[data.object][data.property] = data.value;
                         break;
                     }
+                    case 'oneshot-result': {
+                        if (data.iteration != self.oneshotState.iteration) {
+                            console.debug('received stale prerender, ignoring');
+                            return;
+                        }
+
+                        if (self.debug) {
+                            console.info('oneshot received (start=' +
+                                    data.eventStart + ', empty=' + data.emptyFinish +
+                                    '), render: ' + Math.round(data.spentTime) + ' ms');
+                        }
+                        self.oneshotState.renderRequested = false;
+                        if (Math.abs(data.lastRenderedTime - self.oneshotState.requestNextTimestamp) < 0.01) {
+                            self.oneshotState.requestNextTimestamp = -1;
+                        }
+                        if (data.eventStart - data.lastRenderedTime > 0.01) {
+                            // generate bogus empty element, so all timeline is covered anyway
+                            self.renderedItems.push({
+                                eventStart: data.lastRenderedTime,
+                                eventFinish: data.lastRenderedTime - 0.001,
+                                emptyFinish: data.eventStart,
+                                viewport: data.viewport,
+                                spentTime: 0,
+                                blendTime: 0,
+                                items: [],
+                                animated: false,
+                                size: 0
+                            });
+                        }
+
+                        var items = [];
+                        var size = 0;
+                        for (var i = 0, len = data.canvases.length; i < len; i++) {
+                            var item = data.canvases[i];
+                            items.push({
+                                w: item.w,
+                                h: item.h,
+                                x: item.x,
+                                y: item.y,
+                                image: new ImageData(new Uint8ClampedArray(item.buffer), item.w, item.h)
+                            });
+                            size += item.buffer.byteLength;
+                        }
+
+                        var eventSplitted = false;
+                        if ((data.emptyFinish > 0 && data.emptyFinish - data.eventStart < 1.0 / self.targetFps) || data.animated) {
+                            var newFinish = data.eventStart + 1.0 / self.targetFps;
+                            data.emptyFinish = newFinish;
+                            data.eventFinish = newFinish;
+                            eventSplitted = true;
+                        }
+                        self.renderedItems.push({
+                            eventStart: data.eventStart,
+                            eventFinish: data.eventFinish,
+                            emptyFinish: data.emptyFinish,
+                            spentTime: data.spentTime,
+                            blendTime: data.blendTime,
+                            viewport: data.viewport,
+                            items: items,
+                            animated: data.animated,
+                            size: size
+                        });
+
+                        self.renderedItems.sort(function (a, b) {
+                            return a.eventStart - b.eventStart;
+                        });
+
+                        if (self.oneshotState.requestNextTimestamp >= 0) {
+                            // requesting an out of order event render
+                            tryRequestOneshot(self.oneshotState.requestNextTimestamp, true);
+                        } else if (data.eventStart < 0) {
+                            console.info('oneshot received "end of frames" event');
+                        } else if (data.emptyFinish >= 0) {
+                            // there's some more event to render, try requesting next event
+                            tryRequestOneshot(data.emptyFinish, eventSplitted);
+                        } else {
+                            console.info('there are no more events to prerender');
+                        }
+                        break;
+                    }
                     default:
                         throw 'eh?';
                 }
@@ -473,6 +763,7 @@ var SubtitlesOctopus = function (options) {
                 width: self.canvas.width,
                 height: self.canvas.height
             });
+            self.resetRenderAheadCache(true);
         }
     };
 
@@ -508,6 +799,7 @@ var SubtitlesOctopus = function (options) {
             target: 'set-track-by-url',
             url: url
         });
+        self.resetRenderAheadCache(false);
     };
 
     self.setTrack = function (content) {
@@ -515,12 +807,14 @@ var SubtitlesOctopus = function (options) {
             target: 'set-track',
             content: content
         });
+        self.resetRenderAheadCache(false);
     };
 
     self.freeTrack = function (content) {
         self.worker.postMessage({
             target: 'free-track'
         });
+        self.resetRenderAheadCache(false);
     };
 
 
@@ -552,6 +846,8 @@ var SubtitlesOctopus = function (options) {
         if (self.video) {
             self.video.parentNode.removeChild(self.canvasParent);
         }
+
+        stopOneshotRender();
     };
 
     self.fetchFromWorker = function (workerOptions, onSuccess, onError) {
