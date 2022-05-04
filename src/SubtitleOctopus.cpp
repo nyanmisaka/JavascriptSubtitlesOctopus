@@ -21,7 +21,7 @@ int log_level = 3;
 
 class ReusableBuffer {
 public:
-    ReusableBuffer(): buffer(NULL), size(-1), lessen_counter(0) {}
+    ReusableBuffer(): buffer(NULL), size(0), lessen_counter(0) {}
 
     ~ReusableBuffer() {
         free(buffer);
@@ -30,11 +30,11 @@ public:
     void clear() {
         free(buffer);
         buffer = NULL;
-        size = -1;
+        size = 0;
         lessen_counter = 0;
     }
 
-    void *take(int new_size, bool keep_content) {
+    void *take(size_t new_size, bool keep_content) {
         if (size >= new_size) {
             if (size >= 1.3 * new_size) {
                 // big reduction request
@@ -63,14 +63,14 @@ public:
         return buffer;
     }
 
-    int capacity() const {
+    size_t capacity() const {
         return size;
     }
 
 private:
     void *buffer;
-    int size;
-    int lessen_counter;
+    size_t size;
+    size_t lessen_counter;
 };
 
 void msg_callback(int level, const char *fmt, va_list va, void *data) {
@@ -640,7 +640,7 @@ private:
         }
 
         // find closest free buffer
-        int needed = sizeof(unsigned int) * width * height;
+        size_t needed = sizeof(unsigned int) * width * height;
         RenderBlendStorage *storage = m_blendParts, *bigBuffer = NULL, *smallBuffer = NULL;
         for (int buffer_index = 0; buffer_index < MAX_BLEND_STORAGES; buffer_index++, storage++) {
             if (storage->taken) continue;
