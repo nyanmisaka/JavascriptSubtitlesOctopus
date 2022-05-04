@@ -21,7 +21,7 @@ int log_level = 3;
 
 class ReusableBuffer {
 public:
-    ReusableBuffer(): buffer(NULL), size(-1), lessen_counter(0) {}
+    ReusableBuffer(): buffer(NULL), size(0), lessen_counter(0) {}
 
     ~ReusableBuffer() {
         free(buffer);
@@ -30,11 +30,11 @@ public:
     void clear() {
         free(buffer);
         buffer = NULL;
-        size = -1;
+        size = 0;
         lessen_counter = 0;
     }
 
-    void *take(int new_size, bool keep_content) {
+    void *take(size_t new_size, bool keep_content) {
         if (size >= new_size) {
             if (size >= 1.3 * new_size) {
                 // big reduction request
@@ -63,14 +63,14 @@ public:
         return buffer;
     }
 
-    int capacity() const {
+    size_t capacity() const {
         return size;
     }
 
 private:
     void *buffer;
-    int size;
-    int lessen_counter;
+    size_t size;
+    size_t lessen_counter;
 };
 
 void msg_callback(int level, const char *fmt, va_list va, void *data) {
@@ -90,30 +90,30 @@ const float MAX_UINT8_CAST = 255.9 / 255;
 
 #define CLAMP_UINT8(value) ((value > MIN_UINT8_CAST) ? ((value < MAX_UINT8_CAST) ? (int)(value * 255) : 255) : 0)
 
-typedef struct RenderBlendPart {
+struct RenderBlendPart {
     int dest_x, dest_y, dest_width, dest_height;
     unsigned char *image;
     RenderBlendPart *next;
-} RenderBlendPart;
+};
 
-typedef struct RenderBlendResult {
+struct RenderBlendResult {
     int changed;
     double blend_time;
     RenderBlendPart *part;
-} RenderBlendResult;
+};
 
 // maximum regions - a grid of 3x3
 #define MAX_BLEND_STORAGES (3 * 3)
-typedef struct {
+struct RenderBlendStorage {
     RenderBlendPart part;
     ReusableBuffer buf;
     bool taken;
-} RenderBlendStorage;
+};
 
-typedef struct {
+struct EventStopTimesResult {
     double eventFinish, emptyFinish;
     int is_animated;
-} EventStopTimesResult;
+};
 
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
@@ -592,12 +592,13 @@ private:
         int width = rect.max_x - rect.min_x + 1, height = rect.max_y - rect.min_y + 1;
 
         // make float buffer for blending
-        float* buf = (float*)m_blend.take(sizeof(float) * width * height * 4, 0);
+        const size_t buffer_size = width * height * 4 * sizeof(float);
+        float* buf = (float*)m_blend.take(buffer_size, 0);
         if (buf == NULL) {
             fprintf(stderr, "jso: cannot allocate buffer for blending\n");
             return NULL;
         }
-        memset(buf, 0, sizeof(float) * width * height * 4);
+        memset(buf, 0, buffer_size);
 
         // blend things in
         for (ASS_Image *cur = img; cur != NULL; cur = cur->next) {
@@ -640,7 +641,7 @@ private:
         }
 
         // find closest free buffer
-        int needed = sizeof(unsigned int) * width * height;
+        size_t needed = sizeof(unsigned int) * width * height;
         RenderBlendStorage *storage = m_blendParts, *bigBuffer = NULL, *smallBuffer = NULL;
         for (int buffer_index = 0; buffer_index < MAX_BLEND_STORAGES; buffer_index++, storage++) {
             if (storage->taken) continue;
