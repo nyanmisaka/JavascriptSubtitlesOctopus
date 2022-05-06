@@ -924,7 +924,7 @@ var SubtitlesOctopus = function (options) {
             style: style
         });
     };
-    
+
     self.getStyles = function (onSuccess, onError) {
         self.fetchFromWorker({
             target: 'get-styles'
