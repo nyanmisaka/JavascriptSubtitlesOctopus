@@ -63,6 +63,10 @@ var SubtitlesOctopus = function (options) {
 
     self.hasAlphaBug = false;
 
+    // private
+    var targetWidth;    // Width of render target
+    var targetHeight;   // Height of render target
+
     (function() {
         if (typeof ImageData.prototype.constructor === 'function') {
             try {
@@ -119,6 +123,10 @@ var SubtitlesOctopus = function (options) {
         self.createCanvas();
         self.setVideo(options.video);
         self.setSubUrl(options.subUrl);
+
+        targetWidth = self.canvas.width;
+        targetHeight = self.canvas.height;
+
         self.worker.postMessage({
             target: 'worker-init',
             width: self.canvas.width,
@@ -742,26 +750,22 @@ var SubtitlesOctopus = function (options) {
             return;
         }
 
+        if (videoSize != null) {
+            self.canvasParent.style.position = 'relative';
+            self.canvas.style.display = 'block';
+            self.canvas.style.position = 'absolute';
+            self.canvas.style.width = videoSize.width + 'px';
+            self.canvas.style.height = videoSize.height + 'px';
+            self.canvas.style.top = top + 'px';
+            self.canvas.style.left = left + 'px';
+            self.canvas.style.pointerEvents = 'none';
+        }
 
-        if (
-          self.canvas.width != width ||
-          self.canvas.height != height ||
-          self.canvas.style.top != top ||
-          self.canvas.style.left != left
-        ) {
+        if (targetWidth !== width || targetHeight !== height) {
             self.canvas.width = width;
             self.canvas.height = height;
-
-            if (videoSize != null) {
-                self.canvasParent.style.position = 'relative';
-                self.canvas.style.display = 'block';
-                self.canvas.style.position = 'absolute';
-                self.canvas.style.width = videoSize.width + 'px';
-                self.canvas.style.height = videoSize.height + 'px';
-                self.canvas.style.top = top + 'px';
-                self.canvas.style.left = left + 'px';
-                self.canvas.style.pointerEvents = 'none';
-            }
+            targetWidth = width;
+            targetHeight = height;
 
             self.worker.postMessage({
                 target: 'canvas',
