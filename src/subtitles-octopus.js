@@ -51,6 +51,7 @@ var SubtitlesOctopus = function (options) {
     self.renderedItems = []; // used to store items rendered ahead when renderAhead > 0
     self.renderAhead = self.renderAhead * 1024 * 1024 * 0.9 /* try to eat less than requested */;
     self.oneshotState = {
+        displayedEvent: null, // Last displayed event
         eventStart: null,
         eventOver: false,
         iteration: 0,
@@ -305,6 +306,10 @@ var SubtitlesOctopus = function (options) {
             }
         }
 
+        if (seekClean) {
+            self.oneshotState.displayedEvent = null;
+        }
+
         var removed = retainedItems.length < self.renderedItems.length;
         self.renderedItems = retainedItems;
         return removed;
@@ -356,6 +361,8 @@ var SubtitlesOctopus = function (options) {
     }
 
     function _renderSubtitleEvent(event, currentTime) {
+        self.oneshotState.displayedEvent = event;
+
         // keep event displayed, if there is no gap after it, until it is replaced by a new one
         var eventOver = event.eventFinish !== event.emptyFinish && event.eventFinish <= currentTime;
         if (self.oneshotState.eventStart == event.eventStart && self.oneshotState.eventOver == eventOver) return;
@@ -427,6 +434,8 @@ var SubtitlesOctopus = function (options) {
                 // reached end-of-events
                 nextTime = -1;
             }
+        } else if (self.oneshotState.displayedEvent) {
+            _renderSubtitleEvent(self.oneshotState.displayedEvent, currentTime);
         }
 
         var freed = !self.video.paused && _cleanPastRendered(currentTime);
@@ -474,6 +483,10 @@ var SubtitlesOctopus = function (options) {
             self.oneshotState.renderRequested = false;
             self.oneshotState.prevHeight = targetHeight;
             self.oneshotState.prevWidth = targetWidth;
+
+            if (!isResizing) {
+                self.oneshotState.displayedEvent = null;
+            }
 
             if (!self.rafId) self.rafId = window.requestAnimationFrame(oneshotRender);
             tryRequestOneshot(undefined, true);
