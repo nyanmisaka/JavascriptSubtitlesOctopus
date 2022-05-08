@@ -268,7 +268,7 @@ var SubtitlesOctopus = function (options) {
         var retainedItems = [];
         for (var i = 0, len = self.renderedItems.length; i < len; i++) {
             var item = self.renderedItems[i];
-            if (item.emptyFinish < 0 || item.emptyFinish >= currentTime) {
+            if (item.emptyFinish < 0 || currentTime < item.emptyFinish) {
                 // item is not yet finished, retain it
                 retainedItems.push(item);
             }
@@ -348,7 +348,7 @@ var SubtitlesOctopus = function (options) {
     }
 
     function _renderSubtitleEvent(event, currentTime) {
-        var eventOver = event.eventFinish < currentTime;
+        var eventOver = event.eventFinish <= currentTime;
         if (self.oneshotState.eventStart == event.eventStart && self.oneshotState.eventOver == eventOver) return;
         self.oneshotState.eventStart = event.eventStart;
         self.oneshotState.eventOver = eventOver;
@@ -433,7 +433,7 @@ var SubtitlesOctopus = function (options) {
                 var size = 0;
                 for (var i = 0; i < self.renderedItems.length; i++) {
                     var item = self.renderedItems[i];
-                    if (item.emptyFinish < 0 || item.emptyFinish >= stopTime) break;
+                    if (item.emptyFinish < 0 || stopTime < item.emptyFinish) break;
                     size += item.size;
                     if (size >= sizeLimit) break;
                     newCache.push(item);
