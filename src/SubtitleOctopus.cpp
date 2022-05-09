@@ -506,8 +506,8 @@ public:
 
         for (int i = 0; i < track->n_events; i++, cur++) {
             long long start = cur->Start;
-            if (start < now) {
-                if (start + cur->Duration >= now) {
+            if (start <= now) {
+                if (now < start + cur->Duration) {
                     // there's currently an event being displayed, we should render it
                     closest = now;
                     break;
