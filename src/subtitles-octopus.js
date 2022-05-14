@@ -426,13 +426,13 @@ var SubtitlesOctopus = function (options) {
         if (self.renderAhead > 0) {
             var newCache = [];
             if (isResizing && self.oneshotState.prevHeight && self.oneshotState.prevWidth) {
-                if (self.oneshotState.prevHeight == self.canvas.height &&
-                    self.oneshotState.prevWidth == self.canvas.width) return;
+                if (self.oneshotState.prevHeight === targetHeight &&
+                    self.oneshotState.prevWidth === targetWidth) return;
                 var timeLimit = 10, sizeLimit = self.renderAhead * 0.3;
-                if (self.canvas.height >= self.oneshotState.prevHeight * (1.0 - self.resizeVariation) &&
-                    self.canvas.height <= self.oneshotState.prevHeight * (1.0 + self.resizeVariation) &&
-                    self.canvas.width >= self.oneshotState.prevWidth * (1.0 - self.resizeVariation) &&
-                    self.canvas.width <= self.oneshotState.prevWidth * (1.0 + self.resizeVariation)) {
+                if (targetHeight >= self.oneshotState.prevHeight * (1.0 - self.resizeVariation) &&
+                    targetHeight <= self.oneshotState.prevHeight * (1.0 + self.resizeVariation) &&
+                    targetWidth >= self.oneshotState.prevWidth * (1.0 - self.resizeVariation) &&
+                    targetWidth <= self.oneshotState.prevWidth * (1.0 + self.resizeVariation)) {
                     console.debug('viewport changes are small, leaving more of prerendered buffer');
                     timeLimit = 30;
                     sizeLimit = self.renderAhead * 0.5;
@@ -453,8 +453,8 @@ var SubtitlesOctopus = function (options) {
             self.oneshotState.eventStart = null;
             self.oneshotState.iteration++;
             self.oneshotState.renderRequested = false;
-            self.oneshotState.prevHeight = self.canvas.height;
-            self.oneshotState.prevWidth = self.canvas.width;
+            self.oneshotState.prevHeight = targetHeight;
+            self.oneshotState.prevWidth = targetWidth;
 
             if (!self.rafId) self.rafId = window.requestAnimationFrame(oneshotRender);
             tryRequestOneshot(undefined, true);
