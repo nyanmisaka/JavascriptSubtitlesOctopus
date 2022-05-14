@@ -63,6 +63,10 @@ var SubtitlesOctopus = function (options) {
 
     self.hasAlphaBug = false;
 
+    // private
+    var targetWidth;    // Width of render target
+    var targetHeight;   // Height of render target
+
     (function() {
         if (typeof ImageData.prototype.constructor === 'function') {
             try {
@@ -119,6 +123,10 @@ var SubtitlesOctopus = function (options) {
         self.createCanvas();
         self.setVideo(options.video);
         self.setSubUrl(options.subUrl);
+
+        targetWidth = self.canvas.width;
+        targetHeight = self.canvas.height;
+
         self.worker.postMessage({
             target: 'worker-init',
             width: self.canvas.width,
@@ -418,13 +426,13 @@ var SubtitlesOctopus = function (options) {
         if (self.renderAhead > 0) {
             var newCache = [];
             if (isResizing && self.oneshotState.prevHeight && self.oneshotState.prevWidth) {
-                if (self.oneshotState.prevHeight == self.canvas.height &&
-                    self.oneshotState.prevWidth == self.canvas.width) return;
+                if (self.oneshotState.prevHeight === targetHeight &&
+                    self.oneshotState.prevWidth === targetWidth) return;
                 var timeLimit = 10, sizeLimit = self.renderAhead * 0.3;
-                if (self.canvas.height >= self.oneshotState.prevHeight * (1.0 - self.resizeVariation) &&
-                    self.canvas.height <= self.oneshotState.prevHeight * (1.0 + self.resizeVariation) &&
-                    self.canvas.width >= self.oneshotState.prevWidth * (1.0 - self.resizeVariation) &&
-                    self.canvas.width <= self.oneshotState.prevWidth * (1.0 + self.resizeVariation)) {
+                if (targetHeight >= self.oneshotState.prevHeight * (1.0 - self.resizeVariation) &&
+                    targetHeight <= self.oneshotState.prevHeight * (1.0 + self.resizeVariation) &&
+                    targetWidth >= self.oneshotState.prevWidth * (1.0 - self.resizeVariation) &&
+                    targetWidth <= self.oneshotState.prevWidth * (1.0 + self.resizeVariation)) {
                     console.debug('viewport changes are small, leaving more of prerendered buffer');
                     timeLimit = 30;
                     sizeLimit = self.renderAhead * 0.5;
@@ -445,8 +453,8 @@ var SubtitlesOctopus = function (options) {
             self.oneshotState.eventStart = null;
             self.oneshotState.iteration++;
             self.oneshotState.renderRequested = false;
-            self.oneshotState.prevHeight = self.canvas.height;
-            self.oneshotState.prevWidth = self.canvas.width;
+            self.oneshotState.prevHeight = targetHeight;
+            self.oneshotState.prevWidth = targetWidth;
 
             if (!self.rafId) self.rafId = window.requestAnimationFrame(oneshotRender);
             tryRequestOneshot(undefined, true);
@@ -742,26 +750,22 @@ var SubtitlesOctopus = function (options) {
             return;
         }
 
+        if (videoSize != null) {
+            self.canvasParent.style.position = 'relative';
+            self.canvas.style.display = 'block';
+            self.canvas.style.position = 'absolute';
+            self.canvas.style.width = videoSize.width + 'px';
+            self.canvas.style.height = videoSize.height + 'px';
+            self.canvas.style.top = top + 'px';
+            self.canvas.style.left = left + 'px';
+            self.canvas.style.pointerEvents = 'none';
+        }
 
-        if (
-          self.canvas.width != width ||
-          self.canvas.height != height ||
-          self.canvas.style.top != top ||
-          self.canvas.style.left != left
-        ) {
+        if (targetWidth !== width || targetHeight !== height) {
             self.canvas.width = width;
             self.canvas.height = height;
-
-            if (videoSize != null) {
-                self.canvasParent.style.position = 'relative';
-                self.canvas.style.display = 'block';
-                self.canvas.style.position = 'absolute';
-                self.canvas.style.width = videoSize.width + 'px';
-                self.canvas.style.height = videoSize.height + 'px';
-                self.canvas.style.top = top + 'px';
-                self.canvas.style.left = left + 'px';
-                self.canvas.style.pointerEvents = 'none';
-            }
+            targetWidth = width;
+            targetHeight = height;
 
             self.worker.postMessage({
                 target: 'canvas',
@@ -924,7 +928,7 @@ var SubtitlesOctopus = function (options) {
             style: style
         });
     };
-    
+
     self.getStyles = function (onSuccess, onError) {
         self.fetchFromWorker({
             target: 'get-styles'
