@@ -60,6 +60,7 @@ var SubtitlesOctopus = function (options) {
         renderRequested: false,
         requestNextTimestamp: -1,
         nextRequestOffset: 0, // Next request offset, s
+        restart: true,
         prevWidth: null,
         prevHeight: null
     }
@@ -467,9 +468,12 @@ var SubtitlesOctopus = function (options) {
 
         var freed = !self.video.paused && _cleanPastRendered(currentTime);
 
-        if ((freed || !eventToShow) && nextTime >= 0 && Math.abs(self.oneshotState.requestNextTimestamp - nextTime) > EVENTTIME_ULP) {
+        if ((freed || !eventToShow || self.oneshotState.restart)
+                && nextTime >= 0 && Math.abs(self.oneshotState.requestNextTimestamp - nextTime) > EVENTTIME_ULP) {
             tryRequestOneshot(nextTime, nextTime === finishTime ? animated : true);
         }
+
+        self.oneshotState.restart = false;
     }
 
     function stopOneshotRender() {
@@ -511,6 +515,12 @@ var SubtitlesOctopus = function (options) {
             self.oneshotState.prevHeight = targetHeight;
             self.oneshotState.prevWidth = targetWidth;
             self.oneshotState.nextRequestOffset = 0;
+
+            // After resetting, the next `tryRequestOneshot` may be "eaten" by
+            // an already existing (in the cache) event, and it won't be called
+            // in `oneshotRender` either, since the cache won't be freed there
+            // (it was reset here).
+            self.oneshotState.restart = true;
 
             if (!isResizing) {
                 self.oneshotState.displayedEvent = null;
