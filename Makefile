@@ -297,7 +297,7 @@ EMCC_COMMON_ARGS = \
 	-s EXPORTED_RUNTIME_METHODS="['ccall', 'cwrap', 'getValue', 'FS_createPreloadedFile', 'FS_createPath']" \
 	-s NO_EXIT_RUNTIME=1 \
 	--use-preload-plugins \
-	--preload-file assets/default.woff2 \
+	--preload-file assets/default.ttc \
 	--preload-file assets/fonts.conf \
 	-s ALLOW_MEMORY_GROWTH=1 \
 	-s NO_FILESYSTEM=0 \

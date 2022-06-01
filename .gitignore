@@ -19,7 +19,8 @@ src/depcomp
 src/install-sh
 src/missing
 lib/expat/xmlwf/xmlwf
-dist
+dist/libraries/
+dist/license/
 .libs/
 *.bc
 *.lo
