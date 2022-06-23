@@ -88,10 +88,12 @@ Module["preRun"].push(function () {
 
     self.subContent = null;
 
+    self.loadFontFile(".fallback-", self.fallbackFont);
+
     //Module["FS"].mount(Module["FS"].filesystems.IDBFS, {}, '/fonts');
     var fontFiles = self.fontFiles || [];
     for (var i = 0; i < fontFiles.length; i++) {
-        Module["FS_createPreloadedFile"]("/fonts", 'font' + i + '-' + fontFiles[i].split('/').pop(), fontFiles[i], true, true);
+        self.loadFontFile('font' + i + '-', fontFiles[i]);
     }
 });
 
@@ -100,7 +102,7 @@ Module['onRuntimeInitialized'] = function () {
 
     self.changed = Module._malloc(4);
 
-    self.octObj.initLibrary(screen.width, screen.height);
+    self.octObj.initLibrary(screen.width, screen.height, "/fonts/.fallback-" + self.fallbackFont.split('/').pop());
     self.octObj.setDropAnimations(!!self.dropAllAnimations);
     self.octObj.createTrack("/sub.ass");
     self.ass_track = self.octObj.track;
