@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
-#include "../lib/libass/libass/ass.h"
+#include <ass/ass.h>
 
 #include "libass.cpp"
 
