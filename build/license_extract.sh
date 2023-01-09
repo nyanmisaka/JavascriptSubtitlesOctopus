@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Copyright 2021 Oneric
 # SPDX-License-Identifier: ISC
@@ -40,9 +40,11 @@ else
     exit 2
 fi
 
+# Do not ignore licensecheck errors
+set -o pipefail
 
-find "$base_dir" $FINDOPTS -type f -regextype egrep -regex '.*\.(c|h|cpp|hpp|js)$' -exec \
-    licensecheck --machine --copyright --deb-fmt '{}' \; \
+find "$base_dir" $FINDOPTS -type f -regextype egrep -regex '.*\.(c|h|cpp|hpp|js)$' -print0 \
+    | xargs -0 -P1 licensecheck --machine --copyright --deb-fmt --encoding UTF-8 \
     | awk -F"$tabulator" -v base_dir="$base_dir" \
         -v def_license="$def_license" -v def_copy="$def_copy" '
             BEGIN {
