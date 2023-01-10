@@ -266,7 +266,7 @@ self.oneshotRender = function (lastRenderedTime, renderNow, iteration) {
     var eventFinish = -1.0, emptyFinish = -1.0, animated = false;
     var rendered = {};
     if (eventStart >= 0) {
-        eventTimes = self.octObj.findEventStopTimes(eventStart);
+        var eventTimes = self.octObj.findEventStopTimes(eventStart);
         eventFinish = eventTimes.eventFinish;
         emptyFinish = eventTimes.emptyFinish;
         animated = eventTimes.is_animated;
