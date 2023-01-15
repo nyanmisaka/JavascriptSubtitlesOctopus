@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         m4 \
         gperf \
         licensecheck \
+        gawk \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /code
