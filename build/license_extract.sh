@@ -45,7 +45,7 @@ set -o pipefail
 
 find "$base_dir" $FINDOPTS -type f -regextype egrep -regex '.*\.(c|h|cpp|hpp|js)$' -print0 \
     | xargs -0 -P1 licensecheck --machine --copyright --deb-fmt --encoding UTF-8 \
-    | awk -F"$tabulator" -v base_dir="$base_dir" \
+    | gawk -F"$tabulator" -v base_dir="$base_dir" \
         -v def_license="$def_license" -v def_copy="$def_copy" '
             BEGIN {
                 split("", lcfiles)     # Clear array with only pre-Issue 8 POSIX
@@ -91,14 +91,30 @@ find "$base_dir" $FINDOPTS -type f -regextype egrep -regex '.*\.(c|h|cpp|hpp|js)
                 for(lc in lcfiles) {
                     split(lc, lico, SUBSEP)
                     if(lico[1] in tmp)
-                        tmp[lico[1]] = tmp[lico[1]]""SUBSEP"  "lico[2]
+                        tmp[lico[1]] = tmp[lico[1]]""SUBSEP""lico[2]
                     else
                         tmp[lico[1]] = lico[2]
                 }
 
-                for(license in tmp) {
+                asorti(tmp, tmp_sorted)
+
+                for(i in tmp_sorted) {
+                    license = tmp_sorted[i]
+
+                    split(tmp[license], sorted_licenses, SUBSEP)
+                    asort(sorted_licenses);
+
                     printf "License: %s\n", license
-                    printf "Copyright: %s\n", tmp[license]
+
+                    printf "Copyright: "
+
+                    for (j in sorted_licenses) {
+                        if (j > 1)
+                            printf "  "
+
+                        printf "%s\n", sorted_licenses[j]
+                    }
+
                     printf "\n"
                 }
             }
