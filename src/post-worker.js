@@ -93,6 +93,8 @@ self.setTrack = function (content) {
     // Tell libass to render the new track
     self.octObj.createTrack("/sub.ass");
     self.ass_track = self.octObj.track;
+    self.ass_renderer = self.octObj.ass_renderer;
+    self.ass_library = self.octObj.ass_library;
     if (!self.renderOnDemand) {
         self.getRenderMethod()();
     }
