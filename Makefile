@@ -4,8 +4,8 @@
 BASE_DIR:=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 DIST_DIR:=$(BASE_DIR)dist/libraries
 
-export LDFLAGS = -O3 -s ENVIRONMENT=web,webview,worker -s NO_EXIT_RUNTIME=1
-export CFLAGS = -O3 -s USE_PTHREADS=0
+export LDFLAGS = -O3 -s EVAL_CTORS=1 -flto -s ENVIRONMENT=web,webview,worker -s NO_EXIT_RUNTIME=1
+export CFLAGS = -O3 -flto -s USE_PTHREADS=0
 export CXXFLAGS = $(CFLAGS)
 export PKG_CONFIG_PATH = $(DIST_DIR)/lib/pkgconfig
 export EM_PKG_CONFIG_PATH = $(PKG_CONFIG_PATH)
@@ -154,6 +154,7 @@ all-src:
 # Dist Files
 EMCC_COMMON_ARGS = \
 	$(LDFLAGS) \
+	-s AUTO_NATIVE_LIBRARIES=0 \
 	-s EXPORTED_FUNCTIONS="['_main', '_malloc']" \
 	-s DEFAULT_LIBRARY_FUNCS_TO_INCLUDE="['\$$Browser']" \
 	-s EXPORTED_RUNTIME_METHODS="['ccall', 'cwrap', 'getValue', 'FS_createPreloadedFile', 'FS_createPath']" \
