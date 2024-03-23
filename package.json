@@ -4,6 +4,7 @@
   "description": "libass Subtitle Renderer and Parser library for browsers",
   "main": "dist/js/subtitles-octopus.js",
   "files": [
+    "dist/js/default.woff2",
     "dist/js/subtitles*",
     "dist/js/COPYRIGHT"
   ],
