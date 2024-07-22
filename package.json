@@ -1,6 +1,6 @@
 {
   "name": "@jellyfin/libass-wasm",
-  "version": "4.2.1",
+  "version": "4.2.2",
   "description": "libass Subtitle Renderer and Parser library for browsers",
   "main": "dist/js/subtitles-octopus.js",
   "files": [
