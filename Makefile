@@ -165,7 +165,7 @@ EMCC_COMMON_ARGS = \
 	--no-heap-copy \
 	-o $@
 
-dist: src/subtitles-octopus-worker.bc dist/js/subtitles-octopus-worker.js dist/js/subtitles-octopus-worker-legacy.js dist/js/subtitles-octopus.js dist/js/COPYRIGHT dist/js/default.woff2
+dist: src/subtitles-octopus-worker.bc dist/js/subtitles-octopus-worker.js dist/js/subtitles-octopus-worker-legacy.js dist/js/subtitles-octopus.js dist/js/COPYRIGHT dist/js/default.ttc
 
 dist/js/subtitles-octopus-worker.js: src/subtitles-octopus-worker.bc src/pre-worker.js src/SubOctpInterface.js src/post-worker.js build/lib/brotli/js/decode.js
 	mkdir -p dist/js
@@ -203,8 +203,8 @@ dist/license/all:
 dist/js/COPYRIGHT: dist/license/all
 	cp "$<" "$@"
 
-dist/js/default.woff2:
-	cp assets/default.woff2 "$@"
+dist/js/default.ttc:
+	cp assets/default.ttc "$@"
 
 # Clean Tasks
 

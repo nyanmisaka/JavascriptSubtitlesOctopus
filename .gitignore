@@ -6,7 +6,8 @@ a.wasm
 src/WebIDLGrammar.pkl
 src/parser.out
 lib/expat/xmlwf/xmlwf
-dist
+dist/libraries/
+dist/license/
 .libs/
 *.bc
 *.lo
