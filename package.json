@@ -4,13 +4,12 @@
   "description": "libass Subtitle Renderer and Parser library for browsers",
   "main": "dist/js/subtitles-octopus.js",
   "files": [
-    "dist/js/default.woff2",
+    "dist/js/default.ttc",
     "dist/js/subtitles*",
     "dist/js/COPYRIGHT"
   ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "prepare": "if test 0$SKIP_PREPARE -eq 0; then ./run-docker-build.sh; fi"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
